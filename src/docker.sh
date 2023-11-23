@@ -65,21 +65,30 @@ docker::_authenticate() {
     fi
 
     case "${auth}" in
-    Bearer)
-        # Request a new token.
-        common::curl "${curl_opts[@]}" -G ${req_params[@]+"${req_params[@]}"} -- "${realm}" \
-          | common::jq -r '.token? // .access_token? // empty' \
-          | common::read -r token
-        ;;
-    Basic)
-        # Check that we have valid credentials and save them if successful.
-        CURL_ERROUT=1 common::curl "${curl_opts[@]}" -w -G -v ${req_params[@]+"${req_params[@]}"} -- "${url}" \
-          | awk '/Authorization: Basic/ { sub(/\r/, "", $4); print $4 }' \
-          | common::read -r token
-        ;;
-    *)
-        common::err "Unsupported authentication method ${auth}" ;;
-    esac
+	Bearer)
+	    # Request a new token for ghcr.io.
+	    if [ "${registry}" = "ghcr.io" ]; then
+		common::curl "${curl_opts[@]}" -H "Authorization: Basic $(echo -n "${GITHUB_USERNAME}:${GITHUB_TOKEN}" | base64)" \
+		  -G ${req_params[@]+"${req_params[@]}"} -- "https://ghcr.io/token" \
+		  | common::jq -r '.token' \
+		  | common::read -r token
+	    else
+		# For other registries, use the generic Bearer token retrieval.
+		common::curl "${curl_opts[@]}" -G ${req_params[@]+"${req_params[@]}"} -- "${realm}" \
+		  | common::jq -r '.token? // .access_token? // empty' \
+		  | common::read -r token
+	    fi
+	    ;;
+	Basic)
+	    # Check that we have valid credentials and save them if successful.
+	    CURL_ERROUT=1 common::curl "${curl_opts[@]}" -w -G -v ${req_params[@]+"${req_params[@]}"} -- "${url}" \
+	      | awk '/Authorization: Basic/ { sub(/\r/, "", $4); print $4 }' \
+	      | common::read -r token
+	    ;;
+	*)
+	    common::err "Unsupported authentication method ${auth}" ;;
+	esac
+
 
     [ -v fd ] && exec {fd}>&-
 
